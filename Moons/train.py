@@ -6,6 +6,8 @@ from sklearn.metrics import f1_score, confusion_matrix, accuracy_score, precisio
 import numpy as np
 from model import MLP
 from dataset import ImbalancedMoonsDataset
+from sklearn.metrics import roc_curve, auc
+import matplotlib.pyplot as plt
 
 params = {
     "random_seed" : 42,
@@ -18,7 +20,7 @@ params = {
     # dataloader config
     "batch_size" : 32,
     # model_config
-    "hidden_size" : 32,
+    "hidden_size" : 64,
     # optimizer
     "loss_weight" : 1.0, #1.0 equal to no weight
     "lr" : 0.001,
@@ -79,13 +81,16 @@ for epoch in range(params["num_epochs"]):
 # Validation
 model.eval()
 all_preds: list[int] = []
+all_probs: list[float] = []
 all_labels: list[int] = []
 
 with torch.no_grad():
     for batch_x, batch_y in test_loader:
         outputs: torch.Tensor = model(batch_x)
-        preds: torch.Tensor = (outputs.squeeze() > 0.5).int()
+        probs: torch.Tensor = torch.sigmoid(outputs.squeeze())
+        preds: torch.Tensor = (probs > 0.5).int()
         all_preds.extend(preds.numpy())
+        all_probs.extend(probs.numpy())
         all_labels.extend(batch_y.numpy().astype(int))
 
 # Calculate metrics
@@ -95,6 +100,10 @@ recall: float = recall_score(all_labels, all_preds)
 f1: float = f1_score(all_labels, all_preds)
 cm: np.ndarray = confusion_matrix(all_labels, all_preds)
 
+# Compute ROC curve
+fpr, tpr, _ = roc_curve(all_labels, all_probs)
+roc_auc: float = auc(fpr, tpr)
+
 print("\n" + "="*50)
 print("Validation Metrics:")
 print("="*50)
@@ -102,7 +111,22 @@ print(f"Accuracy: {accuracy:.4f}")
 print(f"Precision: {precision:.4f}")
 print(f"Recall: {recall:.4f}")
 print(f"F1 Score: {f1:.4f}")
+print(f"ROC AUC: {roc_auc:.4f}")
 print(f"Confusion Matrix:\n{cm}")
+
+# Plot ROC curve
+plt.figure(figsize=(8, 6))
+plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (AUC = {roc_auc:.4f})')
+plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--', label='Random Classifier')
+plt.xlim([0.0, 1.0])
+plt.ylim([0.0, 1.05])
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Receiver Operating Characteristic (ROC) Curve')
+plt.legend(loc="lower right")
+plt.grid(alpha=0.3)
+plt.show()
+
 
 # Save the trained model
 # torch.save(model.state_dict(), "model.pth")
