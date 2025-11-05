@@ -7,45 +7,74 @@ import numpy as np
 from model import MLP
 from dataset import ImbalancedMoonsDataset
 
+params = {
+    "random_seed" : 42,
+    # dataset_config
+    "n_samples" : 20_000,
+    "noise" : 0.2,
+    "imbalance_ratio" : 0.01,
+    # split config
+    "test_size" : 0.2,
+    # dataloader config
+    "batch_size" : 32,
+    # model_config
+    "hidden_size" : 32,
+    # optimizer
+    "loss_weight" : 1.0, #1.0 equal to no weight
+    "lr" : 0.001,
+    # train config
+    "num_epochs" : 50,
+
+}
+
 
 # Initialize dataset
-dataset: ImbalancedMoonsDataset = ImbalancedMoonsDataset(n_samples=20000, noise=0.2, imbalance_ratio=0.01)
+dataset: ImbalancedMoonsDataset = ImbalancedMoonsDataset(
+    n_samples=params["n_samples"],
+    noise=params["noise"],
+    imbalance_ratio=params["imbalance_ratio"]
+)
 
 # Train-test split with stratification
 indices: np.ndarray = np.arange(len(dataset))
 y_labels: np.ndarray = dataset.y.numpy()
-train_idx, test_idx = train_test_split(indices, test_size=0.2, stratify=y_labels, random_state=42)
+train_idx, test_idx = train_test_split(
+    indices,
+    test_size=params["test_size"],
+    stratify=y_labels,
+    random_state=params["random_seed"]
+)
 
 # Create train and test loaders
 train_dataset: Subset = Subset(dataset, train_idx)
 test_dataset: Subset = Subset(dataset, test_idx)
-train_loader: DataLoader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-test_loader: DataLoader = DataLoader(test_dataset, batch_size=32, shuffle=False)
+train_loader: DataLoader = DataLoader(train_dataset, batch_size=params["batch_size"], shuffle=True)
+test_loader: DataLoader = DataLoader(test_dataset, batch_size=params["batch_size"], shuffle=False)
 
 # Initialize model, optimizer, and loss function
-model: MLP = MLP(input_size=2, hidden_size=64)
-optimizer: torch.optim.Adam = torch.optim.Adam(model.parameters(), lr=0.001)
-criterion: nn.BCELoss = nn.BCELoss()
+model: MLP = MLP(input_size=2, hidden_size=params["hidden_size"])
+optimizer: torch.optim.Adam = torch.optim.Adam(model.parameters(), lr=params["lr"])
+
+criterion: nn.BCEWithLogitsLoss = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([params["loss_weight"]]))
 
 # Training loop
 losses: list[float] = []
-num_epochs: int = 50
 
-for epoch in range(num_epochs):
+for epoch in range(params["num_epochs"]):
     model.train()
     total_loss: float = 0.0
 
     for batch_x, batch_y in train_loader:
         optimizer.zero_grad()
         outputs: torch.Tensor = model(batch_x)
-        loss: torch.Tensor = criterion(outputs.squeeze(), batch_y.float())
+        loss: torch.Tensor = criterion(outputs, batch_y.float().unsqueeze(1))
         loss.backward()
         optimizer.step()
         total_loss += loss.item()
 
     epoch_loss: float = total_loss / len(train_loader)
     losses.append(epoch_loss)
-    print(f"Epoch {epoch + 1}/{num_epochs}, Loss: {epoch_loss:.4f}")
+    print(f"Epoch {epoch + 1}/{params['num_epochs']}, Loss: {epoch_loss:.4f}")
 
 # Validation
 model.eval()
