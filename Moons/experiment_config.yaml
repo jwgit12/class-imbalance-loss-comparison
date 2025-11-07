@@ -1,0 +1,18 @@
+version: "1.0"
+dataset: "moons"
+num_samples: 2000
+nosie: [0.1, 0.2, 0.3]
+imbalance_ratios: [0.01, 0.1, 0.25, 0.5]
+model: "mlp"
+num_layers: 2
+hidden_size: 64
+epochs: 200
+batch_size: 64
+test_size: 0.2
+val_size: 0.1
+lr: 1e-3
+losses: ["ce", "wce", "focal"]
+focal_alpha: [0.1, 0.25, 0.5, 0.75, 0.9]
+focal_gamma: [1,2,3,4,5]
+ce_weights: [1, 5, 10, 25, 50, 90, 99]
+
