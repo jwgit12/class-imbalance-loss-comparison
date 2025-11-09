@@ -12,6 +12,7 @@ import itertools
 import yaml
 from pathlib import Path
 import mlflow
+from focal_loss import FocalLoss
 
 config_path = Path(__file__).parent / "experiment_config.yaml"
 with open(config_path, 'r') as f:
@@ -38,6 +39,7 @@ focal_gamma: list[float] = config["focal_gamma"]
 ce_weights: list[float] = config["ce_weights"]
 
 mlflow.set_experiment("Imbalanced Moons Classification")
+#mlflow.log_artifact(str(config_path), artifact_path="config")
 for noise, imbalance_ratio, loss_fn in itertools.product(noises, imbalance_ratios, loss_functions):
     print(f"Running Experiment with Noise: {noise}, Imbalance Ratio {imbalance_ratio}, Loss Function: {loss_fn}")
     # Initialize dataset
@@ -47,10 +49,13 @@ for noise, imbalance_ratio, loss_fn in itertools.product(noises, imbalance_ratio
         param_combinations = [(weight,) for weight in ce_weights]
     else:  # "ce"
         param_combinations = [(None,)]
+
     for params in param_combinations:
         with mlflow.start_run():
             # Log parameters
             mlflow.log_param("config_version", config_version)
+            mlflow.log_param("dataset", dataset)
+            mlflow.log_param("num_samples", num_samples)
             mlflow.log_param("noise", noise)
             mlflow.log_param("imbalance_ratio", imbalance_ratio)
             mlflow.log_param("loss_function", loss_fn)
@@ -59,6 +64,9 @@ for noise, imbalance_ratio, loss_fn in itertools.product(noises, imbalance_ratio
             mlflow.log_param("batch_size", batch_size)
             mlflow.log_param("learning_rate", lr)
             mlflow.log_param("epochs", epochs)
+            mlflow.log_param("test_size", test_size)
+            mlflow.log_param("val_size", val_size)
+
             dataset: ImbalancedMoonsDataset = ImbalancedMoonsDataset(
                 n_samples=num_samples,
                 noise=noise,
@@ -102,16 +110,18 @@ for noise, imbalance_ratio, loss_fn in itertools.product(noises, imbalance_ratio
             optimizer: torch.optim.Adam = torch.optim.Adam(model.parameters(), lr=lr)
             if loss_fn == "ce":
                 criterion = nn.BCEWithLogitsLoss()
-            else:# loss_fn == "wce":
+            elif loss_fn == "wce":
                 weight = params[0]
                 criterion: nn.BCEWithLogitsLoss = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([weight]))
                 mlflow.log_param("ce_weight", weight)
-            # else:
-            #     # Add Focal Loss here
-            #    mlflow.log_param("alpha", alpha)
-            #   mlflow.log_param("gamma", gamma)
-            #     alpha, gamma = params
-            #     break
+            elif loss_fn == "focal":
+                # Add Focal Loss here
+                alpha, gamma = params
+                mlflow.log_param("alpha", alpha)
+                mlflow.log_param("gamma", gamma)
+                criterion: FocalLoss = FocalLoss(gamma = gamma, alpha= alpha, task_type="binary")
+            else:
+                raise ValueError("Loss Type not defined")
 
             # Training loop
             losses: list[float] = []
@@ -131,6 +141,18 @@ for noise, imbalance_ratio, loss_fn in itertools.product(noises, imbalance_ratio
                 epoch_loss: float = total_loss / len(train_loader)
                 losses.append(epoch_loss)
                 print(f"Epoch {epoch + 1}/{epochs}, Loss: {epoch_loss:.4f}")
+                # Validate Epoch
+                model.eval()
+                val_loss = 0.0
+                with torch.no_grad():
+                    for batch_x, batch_y in val_loader:
+                        outputs = model(batch_x)
+                        loss = criterion(outputs, batch_y.float().unsqueeze(1))
+                        val_loss += loss.item()
+
+                val_loss /= len(val_loader)
+                mlflow.log_metric("train_loss", epoch_loss, step=epoch)
+                mlflow.log_metric("val_loss", val_loss, step=epoch)
 
             # Validation
             model.eval()
