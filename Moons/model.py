@@ -1,28 +1,19 @@
-import torch
 import torch.nn as nn
 
 class MLP(nn.Module):
-    def __init__(self, input_size: int, hidden_size: int, num_layers: int = 2) -> None:
-        super(MLP, self).__init__()
-        self.num_layers: int = num_layers
-        self.layers: nn.ModuleList = nn.ModuleList()
-        self.relu: nn.ReLU = nn.ReLU()
+    def __init__(self, input_dim=2, hidden_size=64, num_layers=2):
+        super().__init__()
 
-        # First layer
-        self.layers.append(nn.Linear(input_size, hidden_size))
+        layers = [nn.Linear(input_dim, hidden_size),
+                  nn.ReLU()]
 
-        # Hidden layers
-        for _ in range(num_layers - 2):
-            self.layers.append(nn.Linear(hidden_size, hidden_size))
+        for _ in range(num_layers - 1):
+            layers.append(nn.Linear(hidden_size, hidden_size))
+            layers.append(nn.ReLU())
 
-        # Output layer
-        self.layers.append(nn.Linear(hidden_size, 1))
+        layers.append(nn.Linear(hidden_size, 1))
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        for i, layer in enumerate(self.layers[:-1]):
-            x = layer(x)
-            x = self.relu(x)
-        x = self.layers[-1](x)
-        return x
+        self.net = nn.Sequential(*layers)
 
-
+    def forward(self, x):
+        return self.net(x).squeeze(1)
