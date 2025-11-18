@@ -38,6 +38,8 @@ $$
 $$
 
 # Presentation
+1. Task
+2. Agenda
 1. Motivation
    2. Imbalanced Datasets (Balancing methods for datasets)
    4. Leaving the dataset unbalanced (examples)

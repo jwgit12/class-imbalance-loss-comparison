@@ -1,0 +1,26 @@
+version: "1.0"
+mlflow_port: "32768"
+mlflow_experiment_name: "CreditCard_Imbalance_Test"
+
+random_seed: 42
+
+# Dataset
+creditcard_csv: "creditcard.csv"
+test_size: 0.2
+val_size: 0.1
+batch_size: 256
+imbalance_profiles: [1.0, 0.7, 0.4, 0.2]
+
+# Training
+epochs: 20
+lr: 0.001
+
+# Models
+models: ["small", "medium", "large"]
+
+# Loss sweep parameters
+losses: ["l2", "ce", "wce", "focal"]
+
+l2_dummy: [0]
+ce_weights: [1.0, 5.0, 20.0, 50.0]
+focal_gamma: [0.0, 1.0, 2.0, 4.0]
