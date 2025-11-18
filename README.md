@@ -1,6 +1,10 @@
 # Class Imbalance Loss Comparison
 ## Objective
 Implement and analyze Focal Loss for handling class imbalance. Compare its convergence and final F1-score performance against a standard weighted cross-entropy.
+
+## Roadmap
+- 
+
 ## To-Do List
 
 - [ ] Implement Focal Loss - **Jannis**

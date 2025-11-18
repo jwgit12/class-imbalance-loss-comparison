@@ -10,17 +10,19 @@ from sklearn.metrics import roc_curve, auc
 import matplotlib.pyplot as plt
 import itertools
 import yaml
+import copy
 from pathlib import Path
 import mlflow
 from focal_loss import FocalLoss
 
+# TODO: Early Stopping, Use of best model on Val Loss.
 config_path = Path(__file__).parent / "experiment_config.yaml"
 with open(config_path, 'r') as f:
     config = yaml.safe_load(f)
 
 
 config_version: str = config["version"]
-dataset: str = config["dataset"]
+dataset_name: str = config["dataset"]
 random_seed: int = config["random_seed"]
 num_samples: int = config["num_samples"]
 noises: list[float] = config["noises"]
@@ -54,7 +56,7 @@ for noise, imbalance_ratio, loss_fn in itertools.product(noises, imbalance_ratio
         with mlflow.start_run():
             # Log parameters
             mlflow.log_param("config_version", config_version)
-            mlflow.log_param("dataset", dataset)
+            mlflow.log_param("dataset", dataset_name)
             mlflow.log_param("num_samples", num_samples)
             mlflow.log_param("noise", noise)
             mlflow.log_param("imbalance_ratio", imbalance_ratio)
@@ -109,9 +111,9 @@ for noise, imbalance_ratio, loss_fn in itertools.product(noises, imbalance_ratio
             model: MLP = MLP(input_size=2, hidden_size=hidden_size, num_layers=num_layers)
             optimizer: torch.optim.Adam = torch.optim.Adam(model.parameters(), lr=lr)
             if loss_fn == "ce":
-                criterion = nn.BCEWithLogitsLoss()
+                criterion: nn.BCEWithLogitsLoss = nn.BCEWithLogitsLoss()
             elif loss_fn == "wce":
-                weight = params[0]
+                weight: float = params[0]
                 criterion: nn.BCEWithLogitsLoss = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([weight]))
                 mlflow.log_param("ce_weight", weight)
             elif loss_fn == "focal":
@@ -119,13 +121,14 @@ for noise, imbalance_ratio, loss_fn in itertools.product(noises, imbalance_ratio
                 alpha, gamma = params
                 mlflow.log_param("alpha", alpha)
                 mlflow.log_param("gamma", gamma)
-                criterion: FocalLoss = FocalLoss(gamma = gamma, alpha= alpha, task_type="binary")
+                criterion: FocalLoss = FocalLoss(gamma = gamma, alpha= alpha, task_type="binary")  # type: ignore[no-redef]
             else:
                 raise ValueError("Loss Type not defined")
 
             # Training loop
             losses: list[float] = []
-
+            best_val_loss: float = float("inf")
+            best_model_state = None
             for epoch in range(epochs):
                 model.train()
                 total_loss: float = 0.0
@@ -151,10 +154,17 @@ for noise, imbalance_ratio, loss_fn in itertools.product(noises, imbalance_ratio
                         val_loss += loss.item()
 
                 val_loss /= len(val_loader)
+                # Maybe consider evaluating on the vla F1 Score, Accuracy etc. maybe Matthews Correlation Coefficent
+                if val_loss < best_val_loss:
+                    best_val_loss = val_loss
+                    best_model_state = copy.deepcopy(model.state_dict())
+
                 mlflow.log_metric("train_loss", epoch_loss, step=epoch)
                 mlflow.log_metric("val_loss", val_loss, step=epoch)
 
             # Validation
+            if best_model_state:
+                model.load_state_dict(best_model_state)
             model.eval()
             all_preds: list[int] = []
             all_probs: list[float] = []
