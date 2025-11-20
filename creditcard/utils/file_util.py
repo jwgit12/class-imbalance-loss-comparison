@@ -30,7 +30,6 @@ def load_dataset(filename: str) -> pd.DataFrame:
     return dataset
 
 
-def setup_mlflow():
-    config = load_config()
+def setup_mlflow(config):
     mlflow.set_tracking_uri("http://localhost:" + config["mlflow_port"])
     mlflow.set_experiment(config["mlflow_experiment_name"])

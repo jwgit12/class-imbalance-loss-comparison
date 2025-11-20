@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, Dict
 
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -20,6 +20,44 @@ class MetaData:
     num_minority: int # number of minority samples
     reduced_by_percent: int # % of reduction of majority samples
     imbalance_ratio: float # Ratio of the imbalance after reducing
+
+def precompute_splits(df: pd.DataFrame) -> Dict[str, Dict]:
+    """
+    Precompute train/val/test loaders for all imbalance ratios.
+    Returns dictionary keyed by ratio name (r100, r60, etc.)
+    Each entry contains: train_loader, val_loader, test_loader, meta
+    """
+    splits = {}
+    df_maj = df[df["Class"] == 0]
+    df_min = df[df["Class"] == 1]
+
+    for ratio in config["imbalance_ratios"]:
+        keep_n = int(len(df_maj) * ratio) if ratio > 0 else len(df_min)
+        new_maj_df = df_maj.sample(keep_n, random_state=config["random_seed"])
+        new_df = pd.concat([df_min, new_maj_df], axis=0).sample(frac=1, random_state=config["random_seed"])
+        reduced_percent = int(ratio * 100)
+
+        meta = MetaData(
+            num_majority=len(new_maj_df),
+            num_minority=len(df_min),
+            reduced_by_percent=reduced_percent,
+            imbalance_ratio=len(new_maj_df) / len(df_min)
+        )
+
+        train_loader, val_loader, test_loader, input_dim = df_to_loaders(new_df, config["batch_size"])
+
+        split_name = f"r{reduced_percent}"
+        splits[split_name] = {
+            "train_loader": train_loader,
+            "val_loader": val_loader,
+            "test_loader": test_loader,
+            "input_dim": input_dim,
+            "meta": meta
+        }
+
+        logger.info(f"Precomputed split {split_name}: {meta.num_majority} majority, {meta.num_minority} minority")
+
+    return splits
 
 def create_new_ratio_df(original_df: pd.DataFrame, drop_ratio: float, verbose = False) -> Tuple[pd.DataFrame, MetaData]:
     """
