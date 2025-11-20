@@ -7,7 +7,7 @@ class FocalLoss(nn.Module):
         FL = (1-pt)^gamma * CE
     No alpha class balancing trick.
     """
-    def __init__(self, alpha=0.5, gamma=2.0, reduction="mean"):
+    def __init__(self, alpha=1, gamma=2.0, reduction="mean"):
         super().__init__()
         self.alpha = alpha
         self.gamma = gamma
