@@ -32,3 +32,14 @@ class MoonsDataset(Dataset):
 
     def __getitem__(self, idx):
         return self.X[idx], self.y[idx]
+
+
+if __name__ == "__main__":
+    #check for consistency after regenerating using random_state
+    dataset = ImbalancedMoonsDataset(n_samples=5000, noise=0.1, imbalance_ratio=0.01, random_state=42)
+    for x,y in dataset:
+        print(x)
+        print(y)
+        break
+        #tensor([-0.1197,  1.0368])
+        #tensor(0.)
