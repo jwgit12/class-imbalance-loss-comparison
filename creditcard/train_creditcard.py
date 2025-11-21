@@ -4,10 +4,10 @@ import mlflow.pytorch
 import numpy as np
 import torch
 import torch.nn as nn
-from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
+from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, precision_score, recall_score, roc_auc_score
 from utils.log_util import get_logger
 from utils.file_util import load_config, setup_mlflow, load_dataset
-from utils.data_util import precompute_splits
+from utils.data_util import precompute_splits, inspect_dataframe
 from model import MLP
 from focal_loss import FocalLoss
 
@@ -16,10 +16,11 @@ config = load_config()
 setup_mlflow(config)
 
 
-def train(model, loss_fn, optimizer, train_loader, epochs, run_idx, total_runs, start_time):
+def train(model, loss_fn, optimizer, train_loader, val_loader, epochs):
+    """Train the model and log per-epoch training and validation losses."""
     model.train()
+
     for epoch in range(epochs):
-        epoch_start = time.time()
         total_loss = 0.0
         for X, y in train_loader:
             optimizer.zero_grad()
@@ -29,46 +30,74 @@ def train(model, loss_fn, optimizer, train_loader, epochs, run_idx, total_runs, 
             optimizer.step()
             total_loss += loss.item()
 
-        mlflow.log_metric("train_loss", total_loss, step=epoch)
-        elapsed = time.time() - epoch_start
-        eta_epoch = elapsed * (epochs - epoch - 1)
-        eta_all = (time.time() - start_time) / (run_idx + 1) * (total_runs - run_idx - 1)
-        logger.info(
-            f"[Epoch {epoch+1}/{epochs}] Loss: {total_loss:.4f} | "
-            f"ETA this run: {eta_epoch:.1f}s | ETA all runs: {eta_all/60:.2f}min"
-        )
+        train_loss = total_loss / len(train_loader)
+
+        # Validation loss
+        model.eval()
+        val_loss_total = 0.0
+        with torch.no_grad():
+            for X_val, y_val in val_loader:
+                logits_val = model(X_val)
+                loss_val = loss_fn(logits_val, y_val)
+                val_loss_total += loss_val.item()
+
+        val_loss = val_loss_total / len(val_loader)
+
+        logger.info(f"[Epoch {epoch+1:03d}] Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
+
+        mlflow.log_metric("train_loss", train_loss, step=epoch)
+        mlflow.log_metric("val_loss", val_loss, step=epoch)
 
 
 def evaluate(model, test_loader):
+    """Evaluate model on test data and log all relevant metrics to MLflow."""
     model.eval()
-    preds, trues = [], []
+    all_preds, all_trues, all_probs = [], [], []
+
     with torch.no_grad():
         for X, y in test_loader:
             logits = model(X)
-            pred = (torch.sigmoid(logits) > 0.5).cpu().numpy()
-            preds.extend(pred)
-            trues.extend(y.cpu().numpy())
+            probs = torch.sigmoid(logits).cpu().numpy()
+            preds = (probs > 0.5).astype(int)
 
-    acc = accuracy_score(trues, preds)
-    f1 = f1_score(trues, preds)
-    cm = confusion_matrix(trues, preds)
+            all_probs.extend(probs)
+            all_preds.extend(preds)
+            all_trues.extend(y.cpu().numpy())
 
-    logger.info(f"Accuracy: {acc:.4f}, F1 Score: {f1:.4f}")
+    # Metrics
+    accuracy = accuracy_score(all_trues, all_preds)
+    f1 = f1_score(all_trues, all_preds)
+    precision = precision_score(all_trues, all_preds)
+    recall = recall_score(all_trues, all_preds)
+    cm = confusion_matrix(all_trues, all_preds)
+    roc_auc = roc_auc_score(all_trues, all_probs)
+
+    # Logging
+    logger.info(f"Accuracy: {accuracy:.4f}, F1: {f1:.4f}, Precision: {precision:.4f}, Recall: {recall:.4f}, ROC AUC: {roc_auc:.4f}")
     logger.info(f"Confusion Matrix:\n{cm}")
 
-    mlflow.log_metric("accuracy", acc)
+    mlflow.log_metric("accuracy", accuracy)
     mlflow.log_metric("f1", f1)
+    mlflow.log_metric("precision", precision)
+    mlflow.log_metric("recall", recall)
+    mlflow.log_metric("roc_auc", roc_auc)
+
+    # Save confusion matrix
     np.savetxt("confusion_matrix.csv", cm, delimiter=",")
     mlflow.log_artifact("confusion_matrix.csv")
+
+    # Save model
     mlflow.pytorch.log_model(model, "model")
 
 
 def run_experiments():
-    # Load dataset once
+    # Load dataset
+    logger.info("Loading dataset...")
     df = load_dataset(config["creditcard_csv"])
-    logger.info("Dataset loaded. Precomputing splits...")
+    inspect_dataframe(df)
 
     # Precompute all splits and loaders
+    logger.info("Dataset loaded. Precomputing splits...")
     splits = precompute_splits(df)
 
     # Compute total number of runs
@@ -139,7 +168,7 @@ def run_experiments():
                         optimizer = torch.optim.Adam(model.parameters(), lr=config["lr"])
 
                         # Train and evaluate
-                        train(model, loss_fn, optimizer, train_loader, config["epochs"], run_idx, total_runs, start_time_all)
+                        train(model, loss_fn, optimizer, train_loader, val_loader, config["epochs"])
                         evaluate(model, test_loader)
 
                     elapsed = time.time() - run_start

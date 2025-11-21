@@ -32,21 +32,25 @@ def precompute_splits(df: pd.DataFrame) -> Dict[str, Dict]:
     df_min = df[df["Class"] == 1]
 
     for ratio in config["imbalance_ratios"]:
+        # Determine the number of samples to keep. Take 1:1 (df_min) if ratio is 0.0
         keep_n = int(len(df_maj) * ratio) if ratio > 0 else len(df_min)
+
+        # Define new DataFrame with reduced sample size
         new_maj_df = df_maj.sample(keep_n, random_state=config["random_seed"])
+
+        # Concat new DataFrame
         new_df = pd.concat([df_min, new_maj_df], axis=0).sample(frac=1, random_state=config["random_seed"])
-        reduced_percent = int(ratio * 100)
 
         meta = MetaData(
             num_majority=len(new_maj_df),
             num_minority=len(df_min),
-            reduced_by_percent=reduced_percent,
+            reduced_by_percent=int(ratio * 100),
             imbalance_ratio=len(new_maj_df) / len(df_min)
         )
 
         train_loader, val_loader, test_loader, input_dim = df_to_loaders(new_df, config["batch_size"])
 
-        split_name = f"r{reduced_percent}"
+        split_name = f"r{meta.reduced_by_percent}"
         splits[split_name] = {
             "train_loader": train_loader,
             "val_loader": val_loader,
@@ -58,56 +62,6 @@ def precompute_splits(df: pd.DataFrame) -> Dict[str, Dict]:
         logger.info(f"Precomputed split {split_name}: {meta.num_majority} majority, {meta.num_minority} minority")
 
     return splits
-
-def create_new_ratio_df(original_df: pd.DataFrame, drop_ratio: float, verbose = False) -> Tuple[pd.DataFrame, MetaData]:
-    """
-    Create a new DataFrame with a downsampled majority class (class 0).
-
-    :param original_df: Original dataset containing a binary column named "Class".
-    :param drop_ratio: Fraction of majority samples (class 0) to keep. Must be between 0 and 1.
-    If the drop_ratio is 0, the split will be 1:1 wit as much majority samples as minority samples.
-    :param verbose: If `True` log information to the console. `False` is default.
-
-    :return: Tuple[pd.DataFrame, int, int, int]:
-            pd.DataFrame: The downsampled dataset containing all minority samples and the reduced majority class.
-            int: Number of majority class samples in the new DataFrame.
-            int: Number of minority class samples (unchanged).
-            int: Percentage of majority class samples removed (0–100).
-    """
-
-    # Split into its majority and minority classes
-    df_maj = original_df[original_df["Class"] == 0]
-    df_min = original_df[original_df["Class"] == 1]
-
-    # Determine amount to keep from the majority samples
-    # If drop_ratio is 0,
-    keep_n = int(len(df_maj) * drop_ratio) if drop_ratio > 0 else len(df_min)
-
-
-    # Create a DataFrame with the new amount of samples to keep
-    new_maj_df = df_maj.sample(keep_n, random_state=config["random_seed"])
-
-    # Concat the new majority and minority samples and shuffle them
-    new_df = pd.concat([df_min, new_maj_df], axis=0).sample(frac=1, random_state=config["random_seed"])
-
-    meta = MetaData(
-        num_majority=len(new_maj_df),
-        num_minority=len(df_min),
-        reduced_by_percent=int(drop_ratio * 100),
-        imbalance_ratio=(len(new_maj_df) / len(df_min)),
-    )
-
-    if verbose:
-        logger.info(f"\n\n--- Inspecting Ratio Adjustment ---")
-        logger.info(f"Remove {100 - (drop_ratio * 100)}% of the majority samples: {len(new_maj_df)}, keep: {keep_n}")
-        logger.info(f"Original: maj: {len(df_maj)},     min: {len(df_min)} -> {(len(df_min)/len(df_maj) * 100):.2f}%")
-        logger.info(f"New:      maj: {len(new_maj_df)},     min: {len(df_min)} -> {(len(df_min)/len(new_maj_df) * 100):.2f}%")
-        logger.info(f"Old Imbalance Ratio: {(len(df_maj) / len(df_min)):.2f}")
-        logger.info(f"New Imbalance Ratio: {(len(new_maj_df) / len(df_min)):.2f}")
-        logger.info(f"Len original dataset: {len(original_df)}")
-        logger.info(f"Len new dataset: {len(new_df)}")
-
-    return new_df, meta
 
 
 def df_to_loaders(df, batch_size):
