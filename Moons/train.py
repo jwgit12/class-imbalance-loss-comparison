@@ -1,3 +1,5 @@
+import sys
+
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Subset
@@ -28,7 +30,7 @@ num_samples: int = config["num_samples"]
 noises: list[float] = config["noises"]
 imbalance_ratios: list[float] = config["imbalance_ratios"]
 model_name: str = config["model"]
-num_layers: int = config["num_layers"]
+num_layers: list[int] = config["num_layers"]
 hidden_size: int = config["hidden_size"]
 epochs: int = config["epochs"]
 batch_size: int = config["batch_size"]
@@ -42,8 +44,7 @@ ce_weights: list[float] = config["ce_weights"]
 
 mlflow.set_experiment("Imbalanced Moons Classification")
 #mlflow.log_artifact(str(config_path), artifact_path="config")
-for noise, imbalance_ratio, loss_fn in itertools.product(noises, imbalance_ratios, loss_functions):
-    print(f"Running Experiment with Noise: {noise}, Imbalance Ratio {imbalance_ratio}, Loss Function: {loss_fn}")
+for noise, imbalance_ratio, loss_fn, num_layer in itertools.product(noises, imbalance_ratios, loss_functions, num_layers):
     # Initialize dataset
     if loss_fn == "focal":
         param_combinations = itertools.product(focal_alpha, focal_gamma)
@@ -52,7 +53,46 @@ for noise, imbalance_ratio, loss_fn in itertools.product(noises, imbalance_ratio
     else:  # "ce"
         param_combinations = [(None,)]
 
+    # Create dataset
+    dataset: ImbalancedMoonsDataset = ImbalancedMoonsDataset(
+        n_samples=num_samples,
+        noise=noise,
+        imbalance_ratio=imbalance_ratio,
+        random_state=random_seed
+    )
+
+    # Train-test split with stratification
+    indices: np.ndarray = np.arange(len(dataset))
+    y_labels: np.ndarray = dataset.y.numpy()
+
+    # First split: train+val vs test
+    train_val_idx, test_idx = train_test_split(
+        indices,
+        test_size=test_size,
+        stratify=y_labels,
+        random_state=random_seed
+    )
+
+    # Second split: train vs val from train_val set
+    train_val_labels = y_labels[train_val_idx]
+    train_idx, val_idx = train_test_split(
+        train_val_idx,
+        test_size=val_size / (1 - test_size),
+        stratify=train_val_labels,
+        random_state=random_seed
+    )
+
+    # Create train, val, and test loaders
+    train_dataset: Subset = Subset(dataset, train_idx)
+    val_dataset: Subset = Subset(dataset, val_idx)
+    test_dataset: Subset = Subset(dataset, test_idx)
+
+    train_loader: DataLoader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_loader: DataLoader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+    test_loader: DataLoader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+
     for params in param_combinations:
+        print(f"Starting experiment with noise={noise}, imbalance_ratio={imbalance_ratio}, num_layer={num_layer}, loss_fn={loss_fn}, params={params}")
         with mlflow.start_run():
             # Log parameters
             mlflow.log_param("config_version", config_version)
@@ -61,7 +101,7 @@ for noise, imbalance_ratio, loss_fn in itertools.product(noises, imbalance_ratio
             mlflow.log_param("noise", noise)
             mlflow.log_param("imbalance_ratio", imbalance_ratio)
             mlflow.log_param("loss_function", loss_fn)
-            mlflow.log_param("num_layers", num_layers)
+            mlflow.log_param("num_layer", num_layer)
             mlflow.log_param("hidden_size", hidden_size)
             mlflow.log_param("batch_size", batch_size)
             mlflow.log_param("learning_rate", lr)
@@ -69,46 +109,10 @@ for noise, imbalance_ratio, loss_fn in itertools.product(noises, imbalance_ratio
             mlflow.log_param("test_size", test_size)
             mlflow.log_param("val_size", val_size)
 
-            dataset: ImbalancedMoonsDataset = ImbalancedMoonsDataset(
-                n_samples=num_samples,
-                noise=noise,
-                imbalance_ratio=imbalance_ratio,
-                random_state=random_seed
-            )
-
-            # Train-test split with stratification
-            indices: np.ndarray = np.arange(len(dataset))
-            y_labels: np.ndarray = dataset.y.numpy()
-
-            # First split: train+val vs test
-            train_val_idx, test_idx = train_test_split(
-                indices,
-                test_size=test_size,
-                stratify=y_labels,
-                random_state=random_seed
-            )
-
-            # Second split: train vs val from train_val set
-            train_val_labels = y_labels[train_val_idx]
-            train_idx, val_idx = train_test_split(
-                train_val_idx,
-                test_size=val_size / (1 - test_size),
-                stratify=train_val_labels,
-                random_state=random_seed
-            )
-
-            # Create train, val, and test loaders
-            train_dataset: Subset = Subset(dataset, train_idx)
-            val_dataset: Subset = Subset(dataset, val_idx)
-            test_dataset: Subset = Subset(dataset, test_idx)
-
-            train_loader: DataLoader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-            val_loader: DataLoader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-            test_loader: DataLoader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
 
             # Initialize model, optimizer, and loss function
-            model: MLP = MLP(input_size=2, hidden_size=hidden_size, num_layers=num_layers)
+            model: MLP = MLP(input_size=2, hidden_size=hidden_size, num_layers=num_layer)
             optimizer: torch.optim.Adam = torch.optim.Adam(model.parameters(), lr=lr)
             if loss_fn == "ce":
                 criterion: nn.BCEWithLogitsLoss = nn.BCEWithLogitsLoss()
@@ -121,13 +125,14 @@ for noise, imbalance_ratio, loss_fn in itertools.product(noises, imbalance_ratio
                 alpha, gamma = params
                 mlflow.log_param("alpha", alpha)
                 mlflow.log_param("gamma", gamma)
-                criterion: FocalLoss = FocalLoss(gamma = gamma, alpha= alpha, task_type="binary")  # type: ignore[no-redef]
+                criterion: FocalLoss = FocalLoss(gamma = gamma, alpha= alpha)  # type: ignore[no-redef]
             else:
                 raise ValueError("Loss Type not defined")
 
             # Training loop
             losses: list[float] = []
             best_val_loss: float = float("inf")
+            best_val_f1: float = 0.0
             best_model_state = None
             for epoch in range(epochs):
                 model.train()
@@ -143,24 +148,57 @@ for noise, imbalance_ratio, loss_fn in itertools.product(noises, imbalance_ratio
 
                 epoch_loss: float = total_loss / len(train_loader)
                 losses.append(epoch_loss)
-                print(f"Epoch {epoch + 1}/{epochs}, Loss: {epoch_loss:.4f}")
                 # Validate Epoch
                 model.eval()
                 val_loss = 0.0
+                all_preds = []
+                all_labels = []
+
+                # --- Validation Loop ---
                 with torch.no_grad():
                     for batch_x, batch_y in val_loader:
+                        # Note: No explicit .to(device) or .cuda() is needed here
+
                         outputs = model(batch_x)
+
+                        # 1. Calculate validation loss
                         loss = criterion(outputs, batch_y.float().unsqueeze(1))
                         val_loss += loss.item()
 
-                val_loss /= len(val_loader)
-                # Maybe consider evaluating on the vla F1 Score, Accuracy etc. maybe Matthews Correlation Coefficent
-                if val_loss < best_val_loss:
-                    best_val_loss = val_loss
-                    best_model_state = copy.deepcopy(model.state_dict())
+                        # 2. Convert outputs to binary predictions
+                        # Assuming a binary classification where the final layer is Sigmoid
+                        probs = torch.sigmoid(outputs)
 
+                        # Apply a threshold (e.g., 0.5) to get binary predictions (0 or 1)
+                        # Squeeze(1) is used to remove the dimension of size 1 if present
+                        binary_preds = (probs > 0.5).int().squeeze()
+
+                        # 3. Store true labels and predictions
+                        # Move tensors to CPU before converting to NumPy
+                        all_labels.extend(batch_y.cpu().numpy())
+                        all_preds.extend(binary_preds.cpu().numpy())
+
+                val_loss /= len(val_loader)
+
+                # Convert lists to NumPy arrays
+                all_labels = np.array(all_labels)
+                all_preds = np.array(all_preds)
+
+                # 4. Calculate the F1 score for the entire validation set
+                val_f1 = f1_score(all_labels, all_preds)
+                print(f"Validation F1 Score: {val_f1:.4f}")
+
+                # --- Model Selection and Logging ---
                 mlflow.log_metric("train_loss", epoch_loss, step=epoch)
                 mlflow.log_metric("val_loss", val_loss, step=epoch)
+                mlflow.log_metric("val_f1", val_f1, step=epoch)
+
+                # 5. Model Selection based on F1 Score (Higher is better)
+                if val_f1 > best_val_f1:
+                    best_val_f1 = val_f1
+                    # Save the model state as it achieved the highest F1 score so far
+                    best_model_state = copy.deepcopy(model.state_dict())
+                    print(f"New best F1 score: {best_val_f1:.4f}. Model state updated.")
 
             # Validation
             if best_model_state:
@@ -186,16 +224,11 @@ for noise, imbalance_ratio, loss_fn in itertools.product(noises, imbalance_ratio
             f1: float = f1_score(all_labels, all_preds)
             cm: np.ndarray = confusion_matrix(all_labels, all_preds)
 
-            # Compute ROC curve
-            fpr, tpr, _ = roc_curve(all_labels, all_probs)
-            roc_auc: float = auc(fpr, tpr)
-
             # Log metrics after training
             mlflow.log_metric("accuracy", accuracy)
             mlflow.log_metric("precision", precision)
             mlflow.log_metric("recall", recall)
             mlflow.log_metric("f1_score", f1)
-            mlflow.log_metric("roc_auc", roc_auc)
 
             # Log the model
             print(batch_x[:1].numpy().shape)

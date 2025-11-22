@@ -38,8 +38,8 @@ class FocalLoss(nn.Module):
 
 if __name__ == "__main__":
     # compare focal loss implementations
-    focal3 = FocalLoss(alpha=1, gamma=2.0)
-    inputs = torch.tensor([[0.2], [0.8], [0.4], [0.6]])
-    targets =  torch.tensor([[0.1], [0.4], [0.9], [0.8]])
+    focal3 = FocalLoss(alpha=0.5, gamma=0.5)
+    inputs = torch.tensor([[0.1], [0.8], [0.1], [0.1]])
+    targets =  torch.tensor([[0.9], [0.1], [0.9], [0.9]])
     loss3 = focal3(inputs, targets)
-    print(f", FocalLossSelf: {loss3.item()}")
+    print(f"FocalLossSelf: {loss3.item()}")
