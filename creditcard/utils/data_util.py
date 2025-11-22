@@ -1,4 +1,4 @@
-from typing import Tuple, Dict
+from typing import Dict, Any
 
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -11,8 +11,6 @@ from .file_util import load_config
 from .log_util import get_logger
 
 logger = get_logger()
-config = load_config()
-
 
 @dataclass
 class MetaData:
@@ -21,7 +19,7 @@ class MetaData:
     reduced_by_percent: int # % of reduction of majority samples
     imbalance_ratio: float # Ratio of the imbalance after reducing
 
-def precompute_splits(df: pd.DataFrame) -> Dict[str, Dict]:
+def precompute_splits(config: Any, df: pd.DataFrame) -> Dict[str, Dict]:
     """
     Precompute train/val/test loaders for all imbalance ratios.
     Returns dictionary keyed by ratio name (r100, r60, etc.)
@@ -48,7 +46,7 @@ def precompute_splits(df: pd.DataFrame) -> Dict[str, Dict]:
             imbalance_ratio=len(new_maj_df) / len(df_min)
         )
 
-        train_loader, val_loader, test_loader, input_dim = df_to_loaders(new_df, config["batch_size"])
+        train_loader, val_loader, test_loader, input_dim = df_to_loaders(config, new_df)
 
         split_name = f"r{meta.reduced_by_percent}"
         splits[split_name] = {
@@ -64,7 +62,7 @@ def precompute_splits(df: pd.DataFrame) -> Dict[str, Dict]:
     return splits
 
 
-def df_to_loaders(df, batch_size):
+def df_to_loaders(config: Any, df: pd.DataFrame):
     logger.info("Transforming DataFrames into loaders...")
 
     X = df.drop("Class", axis=1).values.astype(np.float32)
@@ -77,7 +75,7 @@ def df_to_loaders(df, batch_size):
         tensor_X = torch.tensor(X)
         tensor_y = torch.tensor(y)
         dataset = TensorDataset(tensor_X, tensor_y)
-        return DataLoader(dataset, batch_size=batch_size, shuffle=True)
+        return DataLoader(dataset, batch_size=config["batch_size"], shuffle=True)
 
     train_loader = make_loader(X_train, y_train)
     val_loader = make_loader(X_val, y_val)
