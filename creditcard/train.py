@@ -33,18 +33,36 @@ def train(model, loss_fn, optimizer, train_loader, val_loader, epochs):
         # Validation loss
         model.eval()
         val_loss_total = 0.0
+
+        all_val_preds = []
+        all_val_labels = []
+
         with torch.no_grad():
             for X_val, y_val in val_loader:
                 logits_val = model(X_val)
                 loss_val = loss_fn(logits_val, y_val)
                 val_loss_total += loss_val.item()
 
+                # Convert logits → probabilities → predictions
+                probs = torch.sigmoid(logits_val).cpu().numpy()
+                preds = (probs > 0.5).astype(int)
+
+                all_val_preds.extend(preds)
+                all_val_labels.extend(y_val.cpu().numpy())
+
         val_loss = val_loss_total / len(val_loader)
 
-        logger.info(f"[Epoch {epoch+1:03d}] Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
+        # Validation F1
+        f1 = f1_score(all_val_labels, all_val_preds, zero_division=0)
+
+        logger.info(
+            f"[Epoch {epoch + 1:03d}] "
+            f"Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, Val F1: {f1:.4f}"
+        )
 
         mlflow.log_metric("train_loss", train_loss, step=epoch)
         mlflow.log_metric("val_loss", val_loss, step=epoch)
+        mlflow.log_metric("val_f1", f1, step=epoch)
 
 
 def evaluate(model, test_loader):
