@@ -123,6 +123,8 @@ def run_experiments(config):
         "large": (4, 128)
     }
     total_runs = len(splits) * len(model_sizes) * len(config["losses"]) * max(len(config.get("focal_gamma", [0])), 1)
+    selected_models = {k: v for k, v in model_sizes.items() if k in config["models"]}
+
     run_idx = 0
     start_time_all = time.time()
 
@@ -137,7 +139,7 @@ def run_experiments(config):
         # WCE auto weight
         auto_weight = meta.num_majority / meta.num_minority
 
-        for model_name, (num_layers, hidden_size) in model_sizes.items():
+        for model_name, (num_layers, hidden_size) in selected_models.items():
             for loss_name in config["losses"]:
                 if loss_name == "l2":
                     sweep_values = [0]
