@@ -12,8 +12,8 @@ logger = get_logger()
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
-def load_config() -> dict:
-    config_path = PROJECT_ROOT / "experiment_config.yaml"
+def load_config(name:str) -> dict:
+    config_path = PROJECT_ROOT / "configs" / name
 
     if not config_path.exists():
         raise FileNotFoundError(f"Config not found: {config_path}")
