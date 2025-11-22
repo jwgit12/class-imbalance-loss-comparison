@@ -12,8 +12,6 @@ from model import MLP
 from focal_loss import FocalLoss
 
 logger = get_logger()
-config = load_config()
-setup_mlflow(config)
 
 
 def train(model, loss_fn, optimizer, train_loader, val_loader, epochs):
@@ -90,7 +88,7 @@ def evaluate(model, test_loader):
     mlflow.pytorch.log_model(model, "model")
 
 
-def run_experiments():
+def run_experiments(config):
     # Load dataset
     logger.info("Loading dataset...")
     df = load_dataset(config["creditcard_csv"])
@@ -98,7 +96,7 @@ def run_experiments():
 
     # Precompute all splits and loaders
     logger.info("Dataset loaded. Precomputing splits...")
-    splits = precompute_splits(df)
+    splits = precompute_splits(config, df)
 
     # Compute total number of runs
     model_sizes = {
@@ -176,4 +174,9 @@ def run_experiments():
 
 
 if __name__ == "__main__":
-    run_experiments()
+    config = load_config("main_config.yaml")
+    #config = load_config("small_config.yaml")
+    #config = load_config("medium_config.yaml")
+    #config = load_config("large_config.yaml")
+    setup_mlflow(config)
+    run_experiments(config)
