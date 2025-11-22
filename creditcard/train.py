@@ -122,9 +122,15 @@ def run_experiments(config):
         "medium": (3, 64),
         "large": (4, 128)
     }
-    total_runs = len(splits) * len(model_sizes) * len(config["losses"]) * max(len(config.get("focal_gamma", [0])), 1)
     selected_models = {k: v for k, v in model_sizes.items() if k in config["models"]}
 
+    total_runs = 0
+    for loss_name in config["losses"]:
+        if loss_name == "focal":
+            sweep_count = max(len(config.get("focal_gamma", [1])), 1)
+        else:
+            sweep_count = 1  # CE, WCE, L2 run only once
+        total_runs += len(splits) * len(selected_models) * sweep_count
     run_idx = 0
     start_time_all = time.time()
 
