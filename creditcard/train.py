@@ -85,6 +85,9 @@ def evaluate(model, test_loader):
     f1 = f1_score(all_trues, all_preds)
     precision = precision_score(all_trues, all_preds)
     recall = recall_score(all_trues, all_preds)
+    f1 = f1_score(all_trues, all_preds, zero_division=0)
+    precision = precision_score(all_trues, all_preds, zero_division=0)
+    recall = recall_score(all_trues, all_preds, zero_division=0)
     cm = confusion_matrix(all_trues, all_preds)
     roc_auc = roc_auc_score(all_trues, all_probs)
 
