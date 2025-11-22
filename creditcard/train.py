@@ -160,7 +160,8 @@ def run_experiments(config):
 
                 for val in sweep_values:
                     run_idx += 1
-                    run_name = f"{split_name}_{model_name}_{loss_name}_{val}"
+                    val_name = f"v{val:.1f}"
+                    run_name = f"{split_name}_{model_name}_{loss_name}_{val_name}"
                     logger.info(f"\n--- Run {run_idx}/{total_runs}: {run_name} ---")
                     run_start = time.time()
 
