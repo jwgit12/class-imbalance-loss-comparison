@@ -128,8 +128,10 @@ def run_experiments(config):
     for loss_name in config["losses"]:
         if loss_name == "focal":
             sweep_count = max(len(config.get("focal_gamma", [1])), 1)
+        elif loss_name == "wce":
+            sweep_count = len([split_data["meta"].imbalance_ratio for split_data in splits.values()])
         else:
-            sweep_count = 1  # CE, WCE, L2 run only once
+            sweep_count = 1
         total_runs += len(splits) * len(selected_models) * sweep_count
     run_idx = 0
     start_time_all = time.time()
@@ -142,8 +144,6 @@ def run_experiments(config):
         input_dim = split_data["input_dim"]
         meta = split_data["meta"]
 
-        # WCE auto weight
-        auto_weight = meta.num_majority / meta.num_minority
 
         for model_name, (num_layers, hidden_size) in selected_models.items():
             for loss_name in config["losses"]:
@@ -152,7 +152,7 @@ def run_experiments(config):
                 elif loss_name == "ce":
                     sweep_values = [1.0]
                 elif loss_name == "wce":
-                    sweep_values = [auto_weight]
+                    sweep_values = [split_data["meta"].imbalance_ratio for split_data in splits.values()]
                 elif loss_name == "focal":
                     sweep_values = config["focal_gamma"]
                 else:
@@ -168,6 +168,7 @@ def run_experiments(config):
                     with mlflow.start_run(run_name=run_name):
                         mlflow.log_params({
                             "dataset_split": split_name,
+                            "imbalance_ratio": meta.imbalance_ratio,
                             "model_size": model_name,
                             "num_layers": num_layers,
                             "hidden_size": hidden_size,
