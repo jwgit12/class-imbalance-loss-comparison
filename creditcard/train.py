@@ -82,9 +82,6 @@ def evaluate(model, test_loader):
 
     # Metrics
     accuracy = accuracy_score(all_trues, all_preds)
-    f1 = f1_score(all_trues, all_preds)
-    precision = precision_score(all_trues, all_preds)
-    recall = recall_score(all_trues, all_preds)
     f1 = f1_score(all_trues, all_preds, zero_division=0)
     precision = precision_score(all_trues, all_preds, zero_division=0)
     recall = recall_score(all_trues, all_preds, zero_division=0)
@@ -106,7 +103,7 @@ def evaluate(model, test_loader):
     mlflow.log_artifact("confusion_matrix.csv")
 
     # Save model
-    mlflow.pytorch.log_model(model, "model")
+    mlflow.pytorch.log_model(model, name="model", input_example=X[:1].numpy())
 
 
 def run_experiments(config):
