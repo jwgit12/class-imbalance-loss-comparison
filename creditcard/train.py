@@ -198,6 +198,7 @@ def run_experiments(config):
 
                     elapsed = time.time() - run_start
                     logger.info(f"Finished run {run_idx}/{total_runs} in {elapsed:.1f}s")
+    logger.info(f"Finished experiment in {time.time() - start_time_all:.1f}s")
 
 
 if __name__ == "__main__":
