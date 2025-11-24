@@ -41,8 +41,8 @@ df = pd.read_csv(csv_path)
 X_full = df.drop(columns=["Class"]).values.astype(np.float32)
 y_full = df["Class"].values.astype(np.float32)  # BCE expects float
 
-mlflow.set_tracking_uri("http://localhost:" + "32769")
-mlflow.set_experiment("CreditcardFraud_20Epochs_SmallerModel_v2")
+mlflow.set_tracking_uri("http://localhost:" + "32770")
+mlflow.set_experiment("CF_r1.0_0.5_0.1_e50_b1024_v3")
 
 # --------------------------
 # Function to create stratified loaders

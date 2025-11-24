@@ -4,13 +4,13 @@ random_seed: 42
 
 #imbalance_ratios: [0.01, 0.25, 0.5]
 #imbalance_ratios: [0.5, 0.25, 0.01]
-imbalance_ratios: [1.0]
+imbalance_ratios: [1.0, 0.5, 0.1]
 model: "mlp-64"
 #num_layers: [2, 4]
 num_layers: [2]
 hidden_size: 64
-epochs: 20
-batch_size: 256
+epochs: 50
+batch_size: 1024
 test_size: 0.2
 val_size: 0.1
 lr: 0.001
@@ -21,7 +21,7 @@ focal_alpha: [0.25]
 focal_gamma: [2.0, 5.0]
 # TODO: Adaptive weight based on imbalance ratio
 #ce_weights: [1.0, 5.0, 10.0, 25.0, 50.0, 90.0, 100.0]
-ce_weights: [100]
+ce_weights: [5, 10, 577]
 
 # TODO: Inspect batches if they contain only few minority samples
 # TODO: Inspect if values being plotted correctly
