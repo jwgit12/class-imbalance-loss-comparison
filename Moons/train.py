@@ -1,5 +1,3 @@
-import sys
-
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Subset
@@ -8,8 +6,6 @@ from sklearn.metrics import f1_score, confusion_matrix, accuracy_score, precisio
 import numpy as np
 from model import MLP
 from dataset import ImbalancedMoonsDataset
-from sklearn.metrics import roc_curve, auc
-import matplotlib.pyplot as plt
 import itertools
 import yaml
 import copy
@@ -17,7 +13,6 @@ from pathlib import Path
 import mlflow
 from focal_loss import FocalLoss
 
-# TODO: Early Stopping, Use of best model on Val Loss.
 config_path = Path(__file__).parent / "experiment_config.yaml"
 with open(config_path, 'r') as f:
     config = yaml.safe_load(f)
@@ -157,15 +152,13 @@ for noise, imbalance_ratio, loss_fn, num_layer in itertools.product(noises, imba
                 # --- Validation Loop ---
                 with torch.no_grad():
                     for batch_x, batch_y in val_loader:
-                        # Note: No explicit .to(device) or .cuda() is needed here
-
                         outputs = model(batch_x)
 
                         # 1. Calculate validation loss
                         loss = criterion(outputs, batch_y.float().unsqueeze(1))
                         val_loss += loss.item()
 
-                        # 2. Convert outputs to binary predictions
+                        # Convert outputs to binary predictions
                         # Assuming a binary classification where the final layer is Sigmoid
                         probs = torch.sigmoid(outputs)
 
@@ -222,7 +215,6 @@ for noise, imbalance_ratio, loss_fn, num_layer in itertools.product(noises, imba
             precision: float = precision_score(all_labels, all_preds)
             recall: float = recall_score(all_labels, all_preds)
             f1: float = f1_score(all_labels, all_preds)
-            cm: np.ndarray = confusion_matrix(all_labels, all_preds)
 
             # Log metrics after training
             mlflow.log_metric("accuracy", accuracy)
